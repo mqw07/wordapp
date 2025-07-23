@@ -1,0 +1,178 @@
+//path: 
+//"C:\Users\desto\OneDrive\Documents\GitHub\wordapp"
+
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const PizZip = require('pizzip');
+const Docxtemplater = require('docxtemplater');
+const ImageModule = require("docxtemplater-image-module-free");
+const sizeOf = require("image-size").imageSize;
+const multer = require('multer');
+const app = express();
+const PORT = 3030;
+
+// Setup static folder
+app.use(express.static('public'));
+app.use(express.urlencoded({ extended: true }));
+// Setup multer for file uploads with better configuration
+const upload = multer({ 
+    dest: 'uploads/',
+    limits: {
+        fileSize: 10 * 1024 * 1024 // 10MB limit
+    },
+    fileFilter: (req, file, cb) => {
+        // Accept images only
+        if (file.mimetype.startsWith('image/')) {
+            cb(null, true);
+        } else {
+            cb(new Error('Only image files are allowed!'), false);
+        }
+    }
+});
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Handle form submission with file upload
+app.post('/generate', upload.single('image1'), (req, res) => {
+    try {
+        // Check if template file exists
+        const templatePath = path.resolve(__dirname, 'mpTemplate.docx');
+        if (!fs.existsSync(templatePath)) {
+            return res.status(500).send('Template file not found.');
+        }
+
+        // Check if image was uploaded
+        if (!req.file) {
+            return res.status(400).send('No image file uploaded.');
+        }
+
+        const content = fs.readFileSync(templatePath, 'binary');
+        const zip = new PizZip(content);
+
+        // Setup image module with error handling
+        const imageOpts = {
+            centered: false,
+            fileType: "docx",
+            getImage: (tagValue, tagName) => {
+                try {
+                    if (!fs.existsSync(tagValue)) {
+                        throw new Error(`Image file not found: ${tagValue}`);
+                    }
+                    return fs.readFileSync(tagValue);
+                } catch (error) {
+                    console.error(`Error reading image ${tagValue}:`, error);
+                    throw error;
+                }
+            },
+            getSize: (img, tagValue, tagName) => {
+                try {
+                    const size = sizeOf(img);
+                    const maxWidth = 600;
+                    
+                    // Handle cases where image might be very small
+                    if (size.width <= maxWidth) {
+                        return [size.width, size.height];
+                    }
+                    
+                    const ratio = maxWidth / size.width;
+                    return [maxWidth, Math.round(size.height * ratio)];
+                } catch (error) {
+                    console.error('Error calculating image size:', error);
+                    // Return default size if calculation fails
+                    return [400, 300];
+                }
+            }
+        };
+
+        const imageModule = new ImageModule(imageOpts);
+
+        const doc = new Docxtemplater(zip, {
+            paragraphLoop: true,
+            linebreaks: true,
+            modules: [imageModule]
+        });
+
+        // Prepare data with validation
+        const data = {
+            sitecode: req.body.sitecode || '',
+            sitedesc: req.body.sitedesc || '',
+            wbfile: req.body.wbfile || '',
+            reportdate: req.body.date || new Date().toISOString().split('T')[0],
+            sitename: req.body.sitename || '',
+            image1: req.file.path, // This should match the placeholder in your template
+            customername: req.body.customername || '',
+        };
+
+        console.log('Template data:', data);
+
+        doc.setData(data);
+        doc.render();
+
+        const buffer = doc.getZip().generate({ type: 'nodebuffer' });
+
+        // Set proper headers for file download
+        res.set({
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'Content-Disposition': `attachment; filename="${data.sitename || 'report'}_${data.reportdate}.docx"`,
+            'Content-Length': buffer.length
+        });
+
+        res.send(buffer);
+
+        // Clean up uploaded file after sending response
+        setTimeout(() => {
+            fs.unlink(req.file.path, (err) => {
+                if (err) {
+                    console.error('Error deleting uploaded file:', err);
+                } else {
+                    console.log('Uploaded file cleaned up:', req.file.path);
+                }
+            });
+        }, 1000); // Small delay to ensure file is sent
+
+    } catch (err) {
+        console.error('Error generating document:', err);
+        
+        // Clean up uploaded file on error
+        if (req.file && req.file.path) {
+            fs.unlink(req.file.path, () => {});
+        }
+        
+        // Send more specific error message
+        if (err.message.includes('Multi error')) {
+            res.status(500).send('Template processing failed. Check your template placeholders.');
+        } else if (err.message.includes('Image')) {
+            res.status(500).send('Image processing failed. Please check your image file.');
+        } else {
+            res.status(500).send('Failed to generate document: ' + err.message);
+        }
+    }
+});
+
+// Error handling middleware for multer
+app.use((error, req, res, next) => {
+    if (error instanceof multer.MulterError) {
+        if (error.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).send('File too large. Maximum size is 10MB.');
+        }
+    }
+    if (error.message === 'Only image files are allowed!') {
+        return res.status(400).send('Only image files are allowed.');
+    }
+    next(error);
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+app.listen(PORT, () => {
+    console.log(`Server running at http://localhost:${PORT}`);
+    console.log(`Health check: http://localhost:${PORT}/health`);
+});

@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generate Word Document</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        
+        input[type="text"], 
+        input[type="date"],
+        input[type="file"],
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 120px;
+        }
+        
+        input[type="file"] {
+            padding: 5px;
+        }
+        
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            width: 100%;
+        }
+        
+        button:hover {
+            background-color: #0056b3;
+        }
+        
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .file-info {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 10px;
+        }
+        
+        .error {
+            color: #dc3545;
+            font-size: 14px;
+            margin-top: 5px;
+            display: none;
+        }
+        
+        .preview {
+            max-width: 200px;
+            max-height: 200px;
+            margin-top: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Generate Word Document Report</h1>
+        
+        <form id="docForm" method="POST" action="/generate" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="sitecode">Site Code:</label>
+                <input type="text" id="sitecode" name="sitecode" required placeholder="Enter site code">
+            </div>
+
+            <div class="form-group">
+                <label for="sitename">Site Name:</label>
+                <input type="text" id="sitename" name="sitename" required placeholder="Enter site name">
+            </div>
+
+            <div class="form-group">
+                <label for="wbfile">Wesbell file:</label>
+                <input type="text" id="wbfile" name="wbfile" required placeholder="Enter wesbell file code...">
+            </div>
+                
+            <div class="form-group">
+                <label for="date">Report Date:</label>
+                <input type="date" id="date" name="date" required>
+            </div>
+
+            <div class="form-group">
+                <label for="image1">Cover Image:</label>
+                <input type="file" id="image1" name="image1" accept="image/*" required>
+                <div class="file-info">Supported formats: JPG, PNG, GIF. Max size: 10MB</div>
+                <div class="error" id="fileError"></div>
+                <img id="preview" class="preview" alt="Image preview">
+            </div>
+
+            <div class="form-group">
+                <label for="sitedesc">Site Description:</label>
+                <textarea id="sitedesc" name="sitedesc" rows="6" placeholder="Enter detailed site description..."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="customername">Customer Name:</label>
+                <input type="text" id="customername" name="customername" placeholder="Customer Name: ">
+            </div>
+
+            <button type="submit" id="submitBtn">Generate Document</button>
+            
+            <div class="loading" id="loading">
+                <p>Generating document, please wait...</p>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        // Set today's date as default
+        document.getElementById('date').valueAsDate = new Date();
+        
+        // Image preview functionality
+        document.getElementById('image1').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            const preview = document.getElementById('preview');
+            const errorDiv = document.getElementById('fileError');
+            
+            // Clear previous error
+            errorDiv.style.display = 'none';
+            errorDiv.textContent = '';
+            
+            if (file) {
+                // Validate file size (10MB = 10 * 1024 * 1024 bytes)
+                if (file.size > 10 * 1024 * 1024) {
+                    errorDiv.textContent = 'File size must be less than 10MB';
+                    errorDiv.style.display = 'block';
+                    this.value = '';
+                    preview.style.display = 'none';
+                    return;
+                }
+                
+                // Validate file type
+                if (!file.type.startsWith('image/')) {
+                    errorDiv.textContent = 'Please select a valid image file';
+                    errorDiv.style.display = 'block';
+                    this.value = '';
+                    preview.style.display = 'none';
+                    return;
+                }
+                
+                // Show preview
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.src = e.target.result;
+                    preview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            } else {
+                preview.style.display = 'none';
+            }
+        });
+        
+        // Form submission handling
+        document.getElementById('docForm').addEventListener('submit', function(e) {
+            const submitBtn = document.getElementById('submitBtn');
+            const loading = document.getElementById('loading');
+            
+            // Show loading state
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Generating...';
+            loading.style.display = 'block';
+            
+            // Reset state after 30 seconds (fallback)
+            setTimeout(() => {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Generate Document';
+                loading.style.display = 'none';
+            }, 30000);
+        });
+        
+        // Reset form state when page loads (in case of back button)
+        window.addEventListener('pageshow', function() {
+            const submitBtn = document.getElementById('submitBtn');
+            const loading = document.getElementById('loading');
+            
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Generate Document';
+            loading.style.display = 'none';
+        });
+    </script>
+</body>
+</html>
