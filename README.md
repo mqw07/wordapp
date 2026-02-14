@@ -67,7 +67,7 @@ Structural reports often follow strict formatting and structure. This project ai
 ## Getting Started (Prototype)
 
 ```bash
-git clone https://github.com/your-username/your-repo-name.git
-cd your-repo-name
+git clone https://github.com/mqw07/wordapp
+cd wordapp
 npm install
 npm start
