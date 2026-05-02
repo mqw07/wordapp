@@ -12,32 +12,32 @@
             padding: 20px;
             background-color: #f5f5f5;
         }
-        
+       
         .container {
             background: white;
             padding: 30px;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
-        
+       
         h1 {
             color: #333;
             text-align: center;
             margin-bottom: 30px;
         }
-        
+       
         .form-group {
             margin-bottom: 20px;
         }
-        
+       
         label {
             display: block;
             margin-bottom: 5px;
             font-weight: bold;
             color: #555;
         }
-        
-        input[type="text"], 
+       
+        input[type="text"],
         input[type="date"],
         input[type="file"],
         textarea {
@@ -48,16 +48,16 @@
             font-size: 14px;
             box-sizing: border-box;
         }
-        
+       
         textarea {
             resize: vertical;
             min-height: 120px;
         }
-        
+       
         input[type="file"] {
             padding: 5px;
         }
-        
+       
         button {
             background-color: #007bff;
             color: white;
@@ -69,35 +69,35 @@
             transition: background-color 0.3s;
             width: 100%;
         }
-        
+       
         button:hover {
             background-color: #0056b3;
         }
-        
+       
         button:disabled {
             background-color: #6c757d;
             cursor: not-allowed;
         }
-        
+       
         .file-info {
             font-size: 12px;
             color: #666;
             margin-top: 5px;
         }
-        
+       
         .loading {
             display: none;
             text-align: center;
             margin-top: 10px;
         }
-        
+       
         .error {
             color: #dc3545;
             font-size: 14px;
             margin-top: 5px;
             display: none;
         }
-        
+       
         .preview {
             max-width: 200px;
             max-height: 200px;
@@ -106,114 +106,229 @@
             border-radius: 4px;
             display: none;
         }
+
+        .inline-error {
+            color: #dc3545;
+            margin-bottom: 16px;
+            display: none;
+        }
+
+        .section-title {
+            margin: 28px 0 12px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #ddd;
+            color: #333;
+            font-size: 18px;
+        }
+
+        .ai-actions {
+            margin-bottom: 24px;
+            padding: 16px;
+            border: 1px solid #e4e4e4;
+            border-radius: 6px;
+            background-color: #fafafa;
+        }
+
+        .secondary-btn {
+            margin-top: 10px;
+            background-color: #5a6268;
+        }
+
+        .secondary-btn:hover {
+            background-color: #444b50;
+        }
+
+        .small-note {
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Generate Word Document Report</h1>
-        
+       
         <form id="docForm" method="POST" action="/generate" enctype="multipart/form-data">
-            <div class="form-group">
-                <label for="sitecode">Site Code:</label>
-                <input type="text" id="sitecode" name="sitecode" required placeholder="Enter site code">
+            <div class="inline-error" id="formError"></div>
+            <div class="ai-actions">
+                <label for="projectOverview">Project Overview:</label>
+                <textarea id="projectOverview" rows="5" placeholder="Describe the project scope, timeline, key observations, and relevant context..."></textarea>
+                <button type="button" id="aiFillBtn" class="secondary-btn">Auto-fill Written Sections</button>
+                <div class="small-note" id="aiStatus">Auto-fill uses <code>GROQ_KEY</code> (Groq). Optional <code>GROQ_MODEL</code> defaults to <code>llama-3.1-8b-instant</code>. If you still see Gemini errors, an old Node process is running — stop it and restart; open <code>/health</code> and confirm <code>aiAutofillProvider</code> is <code>groq</code>.</div>
             </div>
+            <div id="dynamicFields"></div>
 
-            <div class="form-group">
-                <label for="sitename">Site Name:</label>
-                <input type="text" id="sitename" name="sitename" required placeholder="Enter site name">
-            </div>
-
-            <div class="form-group">
-                <label for="wbfile">Wesbell file:</label>
-                <input type="text" id="wbfile" name="wbfile" required placeholder="Enter wesbell file code...">
-            </div>
-                
-            <div class="form-group">
-                <label for="date">Report Date:</label>
-                <input type="date" id="date" name="date" required>
-            </div>
-
-            <div class="form-group">
-                <label for="image1">Cover Image:</label>
-                <input type="file" id="image1" name="image1" accept="image/*" required>
-                <div class="file-info">Supported formats: JPG, PNG, GIF. Max size: 10MB</div>
-                <div class="error" id="fileError"></div>
-                <img id="preview" class="preview" alt="Image preview">
-            </div>
-
-            <div class="form-group">
-                <label for="sitedesc">Site Description:</label>
-                <textarea id="sitedesc" name="sitedesc" rows="6" placeholder="Enter detailed site description..."></textarea>
-            </div>
-
-            <div class="form-group">
-                <label for="customername">Customer Name:</label>
-                <input type="text" id="customername" name="customername" placeholder="Customer Name: ">
-            </div>
 
             <button type="submit" id="submitBtn">Generate Document</button>
-            
+           
             <div class="loading" id="loading">
                 <p>Generating document, please wait...</p>
             </div>
         </form>
     </div>
 
+
     <script>
-        // Set today's date as default
-        document.getElementById('date').valueAsDate = new Date();
-        
-        // Image preview functionality
-        document.getElementById('image1').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            const preview = document.getElementById('preview');
-            const errorDiv = document.getElementById('fileError');
-            
-            // Clear previous error
-            errorDiv.style.display = 'none';
-            errorDiv.textContent = '';
-            
-            if (file) {
-                // Validate file size (10MB = 10 * 1024 * 1024 bytes)
-                if (file.size > 10 * 1024 * 1024) {
-                    errorDiv.textContent = 'File size must be less than 10MB';
-                    errorDiv.style.display = 'block';
-                    this.value = '';
-                    preview.style.display = 'none';
-                    return;
-                }
-                
-                // Validate file type
-                if (!file.type.startsWith('image/')) {
-                    errorDiv.textContent = 'Please select a valid image file';
-                    errorDiv.style.display = 'block';
-                    this.value = '';
-                    preview.style.display = 'none';
-                    return;
-                }
-                
-                // Show preview
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    preview.src = e.target.result;
-                    preview.style.display = 'block';
-                };
-                reader.readAsDataURL(file);
-            } else {
-                preview.style.display = 'none';
+        let templateFields = [];
+
+        function toLabel(name) {
+            return name
+                .replace(/[_-]+/g, " ")
+                .replace(/([a-z])([A-Z])/g, "$1 $2")
+                .replace(/\b\w/g, (char) => char.toUpperCase());
+        }
+
+        function createField(field) {
+            const wrapper = document.createElement("div");
+            wrapper.className = "form-group";
+
+            const label = document.createElement("label");
+            label.htmlFor = field.name;
+            const displayLabel = field.label || toLabel(field.name);
+            label.textContent = `${displayLabel}:`;
+            wrapper.appendChild(label);
+
+            if (field.type === "textarea") {
+                const textarea = document.createElement("textarea");
+                textarea.id = field.name;
+                textarea.name = field.name;
+                textarea.rows = 5;
+                textarea.placeholder = `Enter ${displayLabel.toLowerCase()}`;
+                wrapper.appendChild(textarea);
+                return wrapper;
             }
-        });
-        
+
+            const input = document.createElement("input");
+            input.id = field.name;
+            input.name = field.name;
+
+            if (field.type === "image") {
+                input.type = "file";
+                input.accept = "image/*";
+                wrapper.appendChild(input);
+
+                const helper = document.createElement("div");
+                helper.className = "file-info";
+                helper.textContent = "Supported formats: JPG, PNG, GIF. Max size: 10MB";
+                wrapper.appendChild(helper);
+                return wrapper;
+            }
+
+            input.type = field.type === "date" ? "date" : "text";
+            input.placeholder = `Enter ${displayLabel.toLowerCase()}`;
+            if (field.type === "date") {
+                input.valueAsDate = new Date();
+            }
+            wrapper.appendChild(input);
+            return wrapper;
+        }
+
+        async function loadTemplateFields() {
+            const fieldsContainer = document.getElementById("dynamicFields");
+            const formError = document.getElementById("formError");
+            try {
+                const response = await fetch("/api/template-fields");
+                if (!response.ok) {
+                    throw new Error("Could not load template fields.");
+                }
+                const { fields } = await response.json();
+                if (!Array.isArray(fields) || !fields.length) {
+                    throw new Error("No placeholders were found in the template.");
+                }
+                templateFields = fields;
+                fieldsContainer.innerHTML = "";
+
+                const generalFields = fields.filter((field) => field.section !== "photos_shared_by_contractor");
+                const contractorPhotos = fields.filter((field) => field.section === "photos_shared_by_contractor");
+
+                generalFields.forEach((field) => fieldsContainer.appendChild(createField(field)));
+
+                if (contractorPhotos.length) {
+                    const contractorHeader = document.createElement("h2");
+                    contractorHeader.className = "section-title";
+                    contractorHeader.textContent = "Photos Shared by Contractor";
+                    fieldsContainer.appendChild(contractorHeader);
+                    contractorPhotos.forEach((field) => fieldsContainer.appendChild(createField(field)));
+                }
+            } catch (error) {
+                formError.textContent = error.message;
+                formError.style.display = "block";
+            }
+        }
+
+        function shouldAiFillField(field) {
+            if (!field || (field.type !== "text" && field.type !== "textarea")) {
+                return false;
+            }
+            const structuredFields = new Set(["sitecode", "sitename", "reportdate", "latn", "latw", "groundele", "pourdate"]);
+            return !structuredFields.has(field.name.toLowerCase());
+        }
+
+        async function runAiFill() {
+            const aiStatus = document.getElementById("aiStatus");
+            const aiFillBtn = document.getElementById("aiFillBtn");
+            const overview = document.getElementById("projectOverview").value.trim();
+
+            if (!overview) {
+                aiStatus.textContent = "Enter a project overview first.";
+                return;
+            }
+
+            const currentValues = {};
+            templateFields.forEach((field) => {
+                if (field.type === "image") return;
+                const input = document.getElementById(field.name);
+                if (!input) return;
+                currentValues[field.name] = input.value || "";
+            });
+
+            aiFillBtn.disabled = true;
+            aiFillBtn.textContent = "Generating...";
+            aiStatus.textContent = "Generating draft text for written sections...";
+
+            try {
+                const response = await fetch("/api/ai-fill", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ overview, currentValues }),
+                });
+                const payload = await response.json();
+                if (!response.ok) {
+                    throw new Error(payload.error || "AI autofill failed.");
+                }
+
+                const suggestions = payload.suggestions || {};
+                let appliedCount = 0;
+                templateFields.forEach((field) => {
+                    if (!shouldAiFillField(field)) return;
+                    const nextValue = suggestions[field.name];
+                    if (typeof nextValue !== "string" || !nextValue.trim()) return;
+                    const input = document.getElementById(field.name);
+                    if (!input) return;
+                    input.value = nextValue;
+                    appliedCount += 1;
+                });
+
+                aiStatus.textContent = `Applied AI suggestions to ${appliedCount} field${appliedCount === 1 ? "" : "s"}.`;
+            } catch (error) {
+                aiStatus.textContent = error.message;
+            } finally {
+                aiFillBtn.disabled = false;
+                aiFillBtn.textContent = "Auto-fill Written Sections";
+            }
+        }
+       
         // Form submission handling
         document.getElementById('docForm').addEventListener('submit', function(e) {
             const submitBtn = document.getElementById('submitBtn');
             const loading = document.getElementById('loading');
-            
+           
             // Show loading state
             submitBtn.disabled = true;
             submitBtn.textContent = 'Generating...';
             loading.style.display = 'block';
-            
+           
             // Reset state after 30 seconds (fallback)
             setTimeout(() => {
                 submitBtn.disabled = false;
@@ -221,16 +336,20 @@
                 loading.style.display = 'none';
             }, 30000);
         });
-        
+       
         // Reset form state when page loads (in case of back button)
         window.addEventListener('pageshow', function() {
             const submitBtn = document.getElementById('submitBtn');
             const loading = document.getElementById('loading');
-            
+           
             submitBtn.disabled = false;
             submitBtn.textContent = 'Generate Document';
             loading.style.display = 'none';
         });
+
+        document.getElementById("aiFillBtn").addEventListener("click", runAiFill);
+        loadTemplateFields();
     </script>
 </body>
 </html>
+
